@@ -1,0 +1,465 @@
+import { useState, useEffect } from "react";
+
+// ─── SHARED STORAGE KEY ──────────────────────────────────────────────────────
+const DB_KEY = "tb_shared_v1";
+function loadDB() { try { return JSON.parse(localStorage.getItem(DB_KEY)||"null"); } catch { return null; } }
+function saveDB(d) { try { localStorage.setItem(DB_KEY, JSON.stringify(d)); } catch {} }
+function initDB() {
+  let d = loadDB();
+  if (!d) {
+    d = {
+      users: { admin: { pass:"admin123", name:"Admin", role:"admin", unlockedDays:[], methodUnlocked:false } },
+      codes: {}
+    };
+    saveDB(d);
+  }
+  return d;
+}
+function makeCode(str) {
+  let h=0; for(let i=0;i<str.length;i++) h=(Math.imul(31,h)+str.charCodeAt(i))|0;
+  return Math.abs(h).toString(36).toUpperCase().slice(0,6);
+}
+
+// ─── DAY DATA ────────────────────────────────────────────────────────────────
+const DAYS = [
+  { day:1, title:"Setup & First Upload", video:"Motivational / Success Story (5-10 min)", views:"50-100", earning:"₹0–₹20",
+    steps:["Timbuktu app download karo aur ₹99 premium lo","Apna channel professionally setup karo – good profile photo lagao","Pehla video YouTube se download karo (trending motivational)","Video title mein trending keywords use karo: 'Success | Motivation 2024'","Upload karo aur 10 WhatsApp groups mein share karo turant","Facebook reels aur Instagram story mein bhi daalo"],
+    tip:"Pehle din sirf upload aur sharing pe focus karo. Watchtime abhi build hoga." },
+  { day:2, title:"Viral Trick – Trending Content", video:"Trending news / cricket highlight / funny clip", views:"200-500", earning:"₹20–₹50",
+    steps:["Google Trends pe jaao – India ka #1 trending topic dekho","Uss topic pe related video banao ya download karo","Thumbnail bright aur text-heavy rakho (people stop scrolling)","5 Telegram groups mein post karo jisme 1000+ members hon","YouTube Shorts mein bhi same video daalo – cross traffic milega","Comments mein reply karo – engagement badhata hai reach"],
+    tip:"Trending content = automatic views. Koi bhi viral topic pe banao." },
+  { day:3, title:"WhatsApp Status Marketing", video:"Emotional / Relatable video (3-7 min)", views:"300-600", earning:"₹40–₹80",
+    steps:["Aisa video choose karo jo log share karna chahein","Apne 5 dosto ko bol do ki woh apni contact list mein forward karen","WhatsApp broadcast list banao – ek click mein 256 logo ko bhejo","Video ka first 10 second ekdum catchy rakho","Morning 8-10 AM ya Evening 7-9 PM mein upload karo (peak time)","Apne family group mein bhi share karo"],
+    tip:"Subah aur sham ka time sabse zyada traffic deta hai. Miss mat karna." },
+  { day:4, title:"Facebook Group Blasting", video:"Religious / Devotional / Festival video", views:"500-800", earning:"₹60–₹100",
+    steps:["Facebook pe 20 bade religious/local groups join karo","Un groups mein apna video daily share karo","Post ke sath short emotional caption likho Hindi mein","Groups ke admins ko message karo – promotion request karo","Facebook Page banao – same content daalo","Friends ko page like aur share karne bol do"],
+    tip:"Religious content India mein sabse zyada share hota hai. Iska fayda uthao." },
+  { day:5, title:"YouTube Se Traffic Steal Karo", video:"How-to / Tutorial video (10-15 min)", views:"600-1000", earning:"₹80–₹130",
+    steps:["YouTube pe same topic search karo – top video ke comments padho","Wahan apna Timbuktu link daalo (helpful reply ke sath)","YouTube description mein 'Watch Full Version here' likh ke link daalo","5 alag YouTube videos ke comments mein apna link share karo","Quora pe uss topic ka question answer karo – link add karo","Telegram channel banao – subscribe karo toh secret tip milegi (hook)"],
+    tip:"YouTube comments se traffic free mein aata hai. Smart marketing hai yeh." },
+  { day:6, title:"Referral Chain Banao", video:"Earning proof / Success story video", views:"800-1200", earning:"₹100–₹160",
+    steps:["Apni earning screenshot ko video mein dikhao (social proof)","Video mein clearly batao: '99 mein join karo, daily earn karo'","10 naye logon ko refer karo – unhe bhi app use karwao","Refer karne pe aapko extra benefit milega","Ek WhatsApp group banao sirf earners ke liye","Daily group mein earning update share karo – motivation milega sabko"],
+    tip:"Proof dikhoge toh log khud join honge. Earning screenshot powerful hai." },
+  { day:7, title:"Instagram Reels Hack", video:"Dance / Entertainment / Funny (Short 1-3 min)", views:"1000-1500", earning:"₹120–₹180",
+    steps:["Same video ko Instagram Reels pe upload karo","Reels mein trending audio use karo – reach 10x ho jaati hai","Bio mein Timbuktu link add karo","30 relevant hashtags use karo (mix of big + small)","5 influencers ko tag karo – unke followers tak pahunch sakte ho","Reels pe comment karo: 'Full video link in bio'"],
+    tip:"Instagram Reels organic reach deta hai. Trending audio = free promotion." },
+  { day:8, title:"Content Calendar Banao", video:"Weekend special / Long video (15-20 min)", views:"1200-1800", earning:"₹150–₹220",
+    steps:["Weekend pe log zyada time spend karte hain – long video daalo","Video series banao – Episode 1, Episode 2 (log wapas aate hain)","Playlist banao Timbuktu pe – watchtime stack hota hai","Apne top 3 performing videos ko re-share karo naye groups mein","Story polls banao: 'Aapko kaisa content chahiye?' – engagement badhao","Top viewers ko personally thank you message bhejo"],
+    tip:"Series content mein log stuck ho jaate hain. 1 hour watchtime aasaani se milti hai." },
+  { day:9, title:"Bulk Upload Day", video:"Mix of all genres – 2-3 videos today", views:"1500-2500", earning:"₹180–₹260",
+    steps:["Aaj sirf uploading pe focus karo – 2-3 videos daalo","Subah ek, dopahar ek, raat ek – timing spread karo","Purane videos ke description update karo – keywords add karo","Apne sabse popular video ko paid promotion de do (₹50-100 mein)","Friends se genuine reviews aur shares mangwao","Telegram broadcast mein sabhi videos ek sath share karo"],
+    tip:"Ek din mein zyada content = zyada watchtime = zyada earning." },
+  { day:10, title:"FINALE – ₹720+ Target", video:"Best video of the week – your top content", views:"2000-3000+", earning:"₹200–₹300+",
+    steps:["Apne sabse achhe video ko aaj promote karo – sab jagah share karo","10 din ki strategy ek friend ko sikhao – referral chain banao","Apni total earning check karo – screenshot lo","Next month ke liye content calendar plan karo","Premium renew karo – business continue rakho","Apni success story likhkar dosto ko bhejo – aur join karwao"],
+    tip:"Aaj ka din sabse important hai. Sab effort yahan gather hota hai!" },
+];
+
+const METHOD = `📱 APP KYA HAI?
+Timbuktu ek video sharing platform hai jahan aap videos upload karke watchtime ke basis pe earning karte ho.
+
+💰 EARNING STRUCTURE:
+• ₹99 mein premium membership lo
+• 10 videos upload kar sakte ho
+• Har 1 Hour Watchtime = ₹72 earning
+• Daily maximum earning: ₹200–₹300+ (proper strategy se)
+
+🔑 SUCCESS FORMULA:
+1. RIGHT CONTENT: Trending, emotional, viral content choose karo
+2. RIGHT TIMING: Subah 8-10 AM aur Sham 7-9 PM mein upload karo
+3. RIGHT SHARING: WhatsApp, Facebook, Telegram, Instagram – sab jagah share karo
+4. RIGHT CONSISTENCY: Roz ek naya video zaroor upload karo
+
+📊 WATCHTIME CALCULATION:
+• 1 view = average 3-5 minutes watchtime
+• 1000 views = ~50-80 hours watchtime
+• 50 hours watchtime = ₹3,600 earning
+
+⚡ POWER TIPS:
+• Long videos (10-15 min) mein zyada watchtime milta hai
+• Series banao – log baar baar aate hain
+• Trending topics pe video = automatic viral
+• Religious/devotional content sabse zyada share hota hai India mein
+• Morning upload = full day views milte hain
+
+🚫 MISTAKES JO MAT KARNA:
+• Sirf ek platform pe share mat karo
+• Upload karke bhool mat jao – promote karo
+• Low quality thumbnail mat lagao
+• Irregular mat raho – daily consistency chahiye
+
+💡 ADVANCED TRICK:
+Apne 5 dosto ko refer karo jo ₹99 spend karein.
+Jab unka network banta hai, aapka bhi traffic badhta hai.
+
+🎯 TARGET:
+10 din mein minimum ₹720 earn karna possible hai agar daily 1-2 ghante doge.`;
+
+// Crown SVG matching Timbuktu logo
+const Crown = ({size=60}) => (
+  <svg width={size} height={size*0.75} viewBox="0 0 120 90" fill="none">
+    <circle cx="20" cy="18" r="8" stroke="#000" strokeWidth="5" fill="none"/>
+    <circle cx="60" cy="8" r="8" stroke="#000" strokeWidth="5" fill="none"/>
+    <circle cx="100" cy="18" r="8" stroke="#000" strokeWidth="5" fill="none"/>
+    <path d="M10 80 L20 26 L42 52 L60 16 L78 52 L100 26 L110 80 Z" stroke="#000" strokeWidth="5" strokeLinejoin="round" fill="white"/>
+    <rect x="10" y="72" width="100" height="14" rx="3" stroke="#000" strokeWidth="5" fill="white"/>
+  </svg>
+);
+
+export default function UserApp() {
+  const [db, setDb] = useState(()=>initDB());
+  const [pg, setPg] = useState("login");
+  const [user, setUser] = useState(null);
+  const [dayIdx, setDayIdx] = useState(null);
+  const [lf, setLf] = useState({id:"",pass:""});
+  const [rf, setRf] = useState({id:"",pass:"",name:""});
+  const [fe, setFe] = useState("");
+  const [modal, setModal] = useState(null);
+  const [ucode, setUcode] = useState("");
+  const [uerr, setUerr] = useState("");
+
+  useEffect(()=>{
+    const el=document.createElement("style");
+    el.innerHTML=`body{-webkit-user-select:none;user-select:none;}@media print{body{display:none!important;}}`;
+    document.head.appendChild(el);
+    return()=>document.head.removeChild(el);
+  },[]);
+
+  // sync DB on focus (in case admin panel updated it)
+  useEffect(()=>{
+    const sync=()=>setDb(loadDB()||initDB());
+    window.addEventListener("focus",sync);
+    return()=>window.removeEventListener("focus",sync);
+  },[]);
+
+  const persist=fn=>{
+    setDb(p=>{const n=JSON.parse(JSON.stringify(p));fn(n);saveDB(n);return n;});
+  };
+
+  function doLogin(){
+    const u=db.users[lf.id];
+    if(!u||u.pass!==lf.pass) return setFe("❌ ID ya Password galat hai");
+    if(u.role==="admin") return setFe("❌ Admin ke liye alag panel use karo");
+    setFe(""); setUser({id:lf.id,...u}); setPg("dash");
+  }
+  function doReg(){
+    const fresh=loadDB()||db;
+    if(!rf.id||!rf.pass||!rf.name) return setFe("❌ Sab fields bharo");
+    if(fresh.users[rf.id]) return setFe("❌ Yeh ID pehle se exist karti hai");
+    persist(d=>{d.users[rf.id]={pass:rf.pass,name:rf.name,role:"user",unlockedDays:[],methodUnlocked:false};});
+    setFe("✅ Account ban gaya! Ab login karo.");
+    setTimeout(()=>{setPg("login");setFe("");},1400);
+  }
+  function logout(){setUser(null);setPg("login");setLf({id:"",pass:""});}
+
+  function openModal(target){setModal(target);setUcode("");setUerr("");}
+  function doUnlock(){
+    const fresh=loadDB()||db;
+    const key=`${user.id}_${modal}`;
+    const exp=fresh.codes[key];
+    if(!exp) return setUerr("❌ Admin ne code generate nahi kiya abhi tak");
+    if(ucode.trim().toUpperCase()!==exp.toUpperCase()) return setUerr("❌ Galat code hai");
+    persist(d=>{
+      if(modal==="method") d.users[user.id].methodUnlocked=true;
+      else{
+        const n=parseInt(modal.replace("day_",""));
+        if(!d.users[user.id].unlockedDays) d.users[user.id].unlockedDays=[];
+        if(!d.users[user.id].unlockedDays.includes(n)) d.users[user.id].unlockedDays.push(n);
+      }
+    });
+    setUser(prev=>{
+      const u={...prev};
+      if(modal==="method") u.methodUnlocked=true;
+      else{
+        const n=parseInt(modal.replace("day_",""));
+        if(!u.unlockedDays) u.unlockedDays=[];
+        if(!u.unlockedDays.includes(n)) u.unlockedDays=[...u.unlockedDays,n];
+      }
+      return u;
+    });
+    const wasDay=modal!=="method";
+    const dn=wasDay?parseInt(modal.replace("day_",""))-1:null;
+    setModal(null);
+    if(wasDay){setDayIdx(dn);setPg("day");}
+  }
+  function isUnlocked(target){
+    const fresh=loadDB()||db;
+    const u=fresh.users[user?.id];
+    if(!u) return false;
+    if(target==="method") return !!u.methodUnlocked;
+    return !!(u.unlockedDays?.includes(parseInt(target.replace("day_",""))));
+  }
+
+  // ── STYLES ────────────────────────────────────────────────────
+  // Timbuktu colors: yellow-green gradient like the real app logo
+  const logoGrad="linear-gradient(135deg,#c8ff00,#39d400,#00b020)";
+  const C={
+    bg:"#f0fff0", card:"#ffffff", green:"#2db52d", gDark:"#1a8c1a",
+    gLight:"#39d400", limeY:"#c8ff00", text:"#111", muted:"#555",
+    border:"#cce8cc", black:"#000", red:"#e03030"
+  };
+  const s={
+    app:{minHeight:"100vh",background:"#e8f5e8",fontFamily:"'Segoe UI',Arial,sans-serif",color:C.text},
+    hdr:{background:logoGrad,padding:"0",boxShadow:"0 2px 12px #0003"},
+    hdrInner:{padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"},
+    logoBox:{display:"flex",alignItems:"center",gap:8},
+    logoText:{fontFamily:"'Arial Black',sans-serif",fontWeight:900,fontSize:20,color:C.black,letterSpacing:2},
+    wrap:{maxWidth:480,margin:"0 auto",padding:"14px 12px"},
+    card:{background:C.card,borderRadius:14,padding:16,marginBottom:12,boxShadow:"0 2px 8px #0001",border:`1px solid ${C.border}`},
+    gcardYellow:{background:logoGrad,borderRadius:14,padding:16,marginBottom:12,boxShadow:"0 3px 14px #0002"},
+    gcard:{background:"linear-gradient(135deg,#2db52d,#1a8c1a)",borderRadius:14,padding:16,marginBottom:12,boxShadow:"0 3px 14px #0002"},
+    btn:{background:`linear-gradient(135deg,${C.gDark},${C.gLight})`,color:C.black,border:"none",borderRadius:10,padding:"13px 0",fontWeight:900,fontSize:14,cursor:"pointer",width:"100%",marginTop:10,letterSpacing:0.5,boxShadow:"0 2px 8px #2db52d44"},
+    btnOut:{background:"transparent",color:C.green,border:`2px solid ${C.green}`,borderRadius:9,padding:"8px 16px",fontWeight:700,fontSize:12,cursor:"pointer"},
+    inp:{background:"#f5fff5",border:`1.5px solid ${C.border}`,borderRadius:9,padding:"12px 13px",color:C.text,width:"100%",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:9},
+    lbl:{color:C.muted,fontSize:11,marginBottom:3,display:"block",letterSpacing:0.5,fontWeight:600},
+    tag:{background:"#e8ffe8",color:C.green,border:`1px solid ${C.border}`,borderRadius:20,padding:"3px 10px",fontSize:11,display:"inline-block",marginRight:4,marginBottom:3,fontWeight:600},
+    err:{color:C.red,fontSize:12,marginTop:4,fontWeight:600},
+    ok:{color:C.gDark,fontSize:12,marginTop:4,fontWeight:600},
+    mu:{color:C.muted,fontSize:12},
+  };
+
+  // ── UNLOCK MODAL ──────────────────────────────────────────────
+  const Modal=()=>!modal?null:(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:18}}>
+      <div style={{...s.card,width:"100%",maxWidth:360,boxShadow:"0 8px 32px #0005"}}>
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <div style={{fontSize:50}}>🔒</div>
+          <div style={{fontWeight:900,fontSize:17,color:C.black}}>
+            {modal==="method"?"METHOD UNLOCK KARO":`DAY ${modal.replace("day_","")} UNLOCK KARO`}
+          </div>
+          <div style={s.mu}>Admin se code lo aur yahan enter karo</div>
+        </div>
+        <label style={s.lbl}>UNLOCK CODE</label>
+        <input style={s.inp} placeholder="6-character code" value={ucode}
+          onChange={e=>setUcode(e.target.value.toUpperCase())} maxLength={8}
+          onKeyDown={e=>e.key==="Enter"&&doUnlock()}/>
+        {uerr&&<div style={s.err}>{uerr}</div>}
+        <button style={s.btn} onClick={doUnlock}>🔓 UNLOCK KARO</button>
+        <button style={{...s.btn,background:"#f0f0f0",color:C.muted,boxShadow:"none",marginTop:6}}
+          onClick={()=>setModal(null)}>CANCEL</button>
+      </div>
+    </div>
+  );
+
+  // ── LOGIN ─────────────────────────────────────────────────────
+  if(pg==="login") return(
+    <div style={s.app}>
+      <Modal/>
+      {/* Header with Logo */}
+      <div style={s.hdr}>
+        <div style={{...s.hdrInner,flexDirection:"column",alignItems:"center",padding:"20px 16px 16px"}}>
+          <Crown size={70}/>
+          <div style={{...s.logoText,fontSize:28,marginTop:4,letterSpacing:4}}>TIMBUKTU</div>
+          <div style={{color:C.black,fontSize:11,opacity:0.7,letterSpacing:1}}>Jump Competition · Earn Money</div>
+        </div>
+      </div>
+      <div style={s.wrap}>
+        <div style={{...s.card,marginTop:8}}>
+          <div style={{textAlign:"center",marginBottom:16}}>
+            <div style={{fontWeight:900,fontSize:18,color:C.black}}>LOGIN KARO</div>
+            <div style={s.mu}>Apni earning journey shuru karo</div>
+          </div>
+          <label style={s.lbl}>USER ID</label>
+          <input style={s.inp} placeholder="Apna ID daalo" value={lf.id} onChange={e=>setLf(p=>({...p,id:e.target.value}))}/>
+          <label style={s.lbl}>PASSWORD</label>
+          <input style={s.inp} type="password" placeholder="Password" value={lf.pass}
+            onChange={e=>setLf(p=>({...p,pass:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&doLogin()}/>
+          {fe&&<div style={fe.startsWith("✅")?s.ok:s.err}>{fe}</div>}
+          <button style={s.btn} onClick={doLogin}>LOGIN → EARN NOW</button>
+          <div style={{textAlign:"center",marginTop:12}}>
+            <span style={s.mu}>New user? </span>
+            <span style={{color:C.green,cursor:"pointer",fontWeight:700}} onClick={()=>{setFe("");setPg("register");}}>ACCOUNT BANAO</span>
+          </div>
+        </div>
+        {/* Stats */}
+        <div style={{...s.gcardYellow}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,textAlign:"center"}}>
+            {[["10","Videos"],["₹72","Per Hour"],["₹720+","10 Days"]].map(([v,l])=>(
+              <div key={l} style={{background:"rgba(0,0,0,0.12)",borderRadius:10,padding:10}}>
+                <div style={{color:C.black,fontSize:21,fontWeight:900}}>{v}</div>
+                <div style={{color:C.black,fontSize:11,opacity:0.7}}>{l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── REGISTER ──────────────────────────────────────────────────
+  if(pg==="register") return(
+    <div style={s.app}>
+      <div style={s.hdr}>
+        <div style={{...s.hdrInner}}>
+          <div style={s.logoBox}><Crown size={32}/><span style={s.logoText}>TIMBUKTU</span></div>
+          <button style={s.btnOut} onClick={()=>setPg("login")}>← BACK</button>
+        </div>
+      </div>
+      <div style={s.wrap}>
+        <div style={{...s.card,marginTop:8}}>
+          <div style={{textAlign:"center",marginBottom:16}}>
+            <div style={{fontSize:42}}>🆕</div>
+            <div style={{fontWeight:900,fontSize:18,color:C.black}}>NEW ACCOUNT BANAO</div>
+            <div style={s.mu}>Free mein register karo</div>
+          </div>
+          <label style={s.lbl}>APNA NAAM</label>
+          <input style={s.inp} placeholder="Full naam" value={rf.name} onChange={e=>setRf(p=>({...p,name:e.target.value}))}/>
+          <label style={s.lbl}>USER ID CHOOSE KARO</label>
+          <input style={s.inp} placeholder="Unique ID (e.g. raju123)" value={rf.id} onChange={e=>setRf(p=>({...p,id:e.target.value}))}/>
+          <label style={s.lbl}>PASSWORD</label>
+          <input style={s.inp} type="password" placeholder="Strong password" value={rf.pass} onChange={e=>setRf(p=>({...p,pass:e.target.value}))}/>
+          {fe&&<div style={fe.startsWith("✅")?s.ok:s.err}>{fe}</div>}
+          <button style={s.btn} onClick={doReg}>✅ ACCOUNT BANAO</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── DASHBOARD ─────────────────────────────────────────────────
+  if(pg==="dash"&&user){
+    const du=db.users[user.id]||{};
+    const unlockedCount=(du.unlockedDays?.length||0)+(du.methodUnlocked?1:0);
+    return(
+      <div style={s.app}>
+        <Modal/>
+        <div style={s.hdr}>
+          <div style={s.hdrInner}>
+            <div style={s.logoBox}><Crown size={30}/><span style={{...s.logoText,fontSize:17}}>TIMBUKTU</span></div>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <span style={{color:C.black,fontSize:11,fontWeight:600}}>{du.name}</span>
+              <button style={{...s.btnOut,background:"rgba(0,0,0,0.15)",border:"none",color:C.black,fontWeight:700,padding:"5px 10px",fontSize:10}} onClick={logout}>LOGOUT</button>
+            </div>
+          </div>
+        </div>
+        <div style={s.wrap}>
+          {/* Earning Banner */}
+          <div style={s.gcardYellow}>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:38}}>💰</div>
+              <div style={{fontWeight:900,fontSize:20,color:C.black}}>₹720+ EARN KARO</div>
+              <div style={{color:C.black,fontSize:12,opacity:0.75}}>10 Days | 10 Videos | ₹72/hour watchtime</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginTop:12}}>
+                {[["₹99","Investment"],["₹72","Per Hour"],["10","Videos"]].map(([v,l])=>(
+                  <div key={l} style={{background:"rgba(0,0,0,0.12)",borderRadius:9,padding:9}}>
+                    <div style={{color:C.black,fontSize:19,fontWeight:900}}>{v}</div>
+                    <div style={{color:C.black,fontSize:10,opacity:0.7}}>{l}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{marginTop:10,background:"rgba(0,0,0,0.1)",borderRadius:8,padding:"6px 12px",display:"inline-block"}}>
+                <span style={{fontSize:11,fontWeight:700,color:C.black}}>🔓 {unlockedCount}/11 Unlocked</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Method Card */}
+          <div style={{...s.card,borderLeft:`4px solid ${du.methodUnlocked?C.green:C.border}`}}>
+            <div style={{display:"flex",alignItems:"center",gap:11,marginBottom:10}}>
+              <div style={{fontSize:28}}>{du.methodUnlocked?"🔓":"🔒"}</div>
+              <div>
+                <div style={{fontWeight:700,color:C.black,fontSize:14}}>FULL METHOD OF TIMBUKTU</div>
+                <div style={s.mu}>{du.methodUnlocked?"Unlocked – padhne ke liye click karo":"Locked – admin se code lo"}</div>
+              </div>
+            </div>
+            <button style={s.btn} onClick={()=>{if(du.methodUnlocked) setPg("method"); else openModal("method");}}>
+              {du.methodUnlocked?"📖 METHOD PADHAO":"🔑 UNLOCK KARO"}
+            </button>
+          </div>
+
+          {/* 10 Days */}
+          <div style={{fontWeight:900,fontSize:14,marginBottom:10,color:C.black,letterSpacing:0.5}}>📅 10-DAY EARNING PLAN</div>
+          {DAYS.map((d,i)=>{
+            const ul=du.unlockedDays?.includes(d.day);
+            return(
+              <div key={i} style={{...s.card,cursor:"pointer",borderLeft:`4px solid ${ul?C.green:C.border}`,opacity:1}}
+                onClick={()=>{if(ul){setDayIdx(i);setPg("day");}else openModal(`day_${d.day}`);}}>
+                <div style={{display:"flex",alignItems:"center",gap:11}}>
+                  <div style={{background:ul?`linear-gradient(135deg,${C.gDark},${C.gLight})`:"#e8e8e8",color:ul?C.black:"#aaa",borderRadius:"50%",width:38,height:38,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:14,flexShrink:0,boxShadow:ul?"0 2px 8px #2db52d44":"none"}}>
+                    {d.day}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:700,fontSize:13,color:ul?C.black:"#888"}}>DAY {d.day}: {d.title}</div>
+                    <div style={{...s.mu,fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.video}</div>
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{fontSize:18}}>{ul?"🔓":"🔒"}</div>
+                    <div style={{color:ul?C.green:"#bbb",fontWeight:700,fontSize:10}}>{d.earning}</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── METHOD ────────────────────────────────────────────────────
+  if(pg==="method"&&user) return(
+    <div style={s.app}>
+      <div style={s.hdr}>
+        <div style={s.hdrInner}>
+          <div style={s.logoBox}><Crown size={28}/><span style={{...s.logoText,fontSize:16}}>TIMBUKTU</span></div>
+          <button style={s.btnOut} onClick={()=>setPg("dash")}>← BACK</button>
+        </div>
+      </div>
+      <div style={s.wrap}>
+        <div style={{...s.gcard,color:"#fff"}}>
+          <div style={{fontWeight:900,fontSize:15,marginBottom:14,textAlign:"center"}}>🔓 FULL METHOD – UNLOCKED</div>
+          <pre style={{whiteSpace:"pre-wrap",fontSize:13,lineHeight:1.9,fontFamily:"inherit"}}>{METHOD}</pre>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── DAY DETAIL ────────────────────────────────────────────────
+  if(pg==="day"&&dayIdx!==null){
+    const d=DAYS[dayIdx];
+    const du=db.users[user.id]||{};
+    return(
+      <div style={s.app}>
+        <Modal/>
+        <div style={s.hdr}>
+          <div style={s.hdrInner}>
+            <div style={s.logoBox}><Crown size={26}/><span style={{...s.logoText,fontSize:15}}>DAY {d.day}</span></div>
+            <button style={s.btnOut} onClick={()=>setPg("dash")}>← BACK</button>
+          </div>
+        </div>
+        <div style={s.wrap}>
+          <div style={s.gcardYellow}>
+            <div style={{color:C.black,fontSize:16,fontWeight:900}}>📅 DAY {d.day}: {d.title}</div>
+            <div style={{color:C.black,fontSize:12,opacity:0.75,marginBottom:9}}>{d.video}</div>
+            <span style={{...s.tag,background:"rgba(0,0,0,0.12)",border:"none",color:C.black}}>👁 {d.views} views</span>
+            <span style={{...s.tag,background:"rgba(0,0,0,0.15)",border:"none",color:C.black,fontWeight:900}}>💰 {d.earning}</span>
+          </div>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:9,color:C.black}}>📋 STEPS:</div>
+          {d.steps.map((step,i)=>(
+            <div key={i} style={{...s.card,display:"flex",gap:11,padding:13}}>
+              <div style={{background:`linear-gradient(135deg,${C.gDark},${C.gLight})`,color:C.black,width:26,height:26,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:12,flexShrink:0}}>{i+1}</div>
+              <div style={{fontSize:13,lineHeight:1.75,color:C.text}}>{step}</div>
+            </div>
+          ))}
+          <div style={s.gcard}>
+            <div style={{color:"#c8ff00",fontWeight:700,marginBottom:5,fontSize:13}}>💡 PRO TIP:</div>
+            <div style={{fontSize:13,lineHeight:1.75,color:"#fff"}}>{d.tip}</div>
+          </div>
+          <div style={{display:"flex",gap:9}}>
+            {dayIdx>0&&(
+              <button style={{...s.btn,background:"#e8f5e8",color:C.gDark,boxShadow:"none",border:`1.5px solid ${C.green}`}}
+                onClick={()=>setDayIdx(p=>p-1)}>← DAY {d.day-1}</button>
+            )}
+            {dayIdx<9&&(
+              <button style={s.btn} onClick={()=>{
+                const nd=d.day+1;
+                const ul2=db.users[user.id]?.unlockedDays?.includes(nd);
+                if(ul2) setDayIdx(p=>p+1);
+                else{setPg("dash");setTimeout(()=>openModal(`day_${nd}`),100);}
+              }}>DAY {d.day+1} →</button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return <div style={s.app}><div style={{padding:20}}>Loading...</div></div>;
+}
